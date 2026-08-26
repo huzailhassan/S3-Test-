@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["op", "currency", "bet"],
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": ["TRIAL"]
+    },
+    "currency": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bet": {
+      "type": "object",
+      "required": ["defaultBet", "betOptions"],
+      "properties": {
+        "defaultBet": {
+          "type": "number"
+        },
+        "betOptions": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
