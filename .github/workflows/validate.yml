@@ -12,23 +12,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ========================================
+      # Check files
+      # ========================================
       - name: Check files
         shell: bash
         run: |
+          set -e
+
+          echo "========================================"
+          echo "Repository files"
+          echo "========================================"
+
           pwd
           ls -la
 
-          echo "package.json files:"
-          find . -type f -name "package.json" -print
+          echo ""
+          echo "package.json:"
+          find . -maxdepth 1 -type f -name "package.json" -print
 
-          echo "schema.json files:"
+          echo ""
+          echo "schema.json:"
           find . -type f -name "schema.json" -print
 
-          echo "meta.json files:"
+          echo ""
+          echo "meta.json:"
           find . -type f -name "meta.json" -print
 
       # ========================================
-      # Validate JSON + Schema + MD5
+      # Validate JSON + MD5
       # ========================================
       - name: Validate config files
         shell: bash
@@ -43,7 +55,9 @@ jobs:
           while IFS= read -r file
           do
             echo "Checking JSON: $file"
+
             jq empty "$file"
+
             echo "JSON OK: $file"
           done
 
@@ -52,66 +66,98 @@ jobs:
           echo "Step 2: Validate config files"
           echo "========================================"
 
+          # package.json must exist in repository root
+          if [ ! -f "./package.json" ]; then
+            echo "ERROR: package.json is missing from repository root"
+            exit 1
+          fi
+
+          echo "Root package.json found: ./package.json"
+
           find . -type f -name "meta.json" |
           while IFS= read -r meta
           do
             dir=$(dirname "$meta")
 
+            echo ""
+            echo "========================================"
+            echo "Meta: $meta"
+            echo "Directory: $dir"
+            echo "========================================"
+
             name=$(jq -r '.meta.name // empty' "$meta")
             file_name=$(jq -r '.meta.file_name // empty' "$meta")
             expected_md5=$(jq -r '.meta.md5 // empty' "$meta")
 
-            echo ""
-            echo "Meta: $meta"
             echo "Name: $name"
             echo "File: $file_name"
             echo "Expected MD5: $expected_md5"
 
+            # ----------------------------------------
+            # Validate name
+            # ----------------------------------------
             if [ -z "$name" ]; then
-              echo "ERROR: meta.name is missing"
+              echo "ERROR: meta.name is missing in $meta"
               exit 1
             fi
 
+            # ----------------------------------------
+            # Validate file_name
+            # ----------------------------------------
             if [ -z "$file_name" ]; then
-              echo "ERROR: meta.file_name is missing"
+              echo "ERROR: meta.file_name is missing in $meta"
               exit 1
             fi
 
+            # ----------------------------------------
+            # Validate MD5
+            # ----------------------------------------
             if [ -z "$expected_md5" ]; then
-              echo "ERROR: meta.md5 is missing"
+              echo "ERROR: meta.md5 is missing in $meta"
               exit 1
             fi
 
+            # ----------------------------------------
+            # Check config file
+            # ----------------------------------------
             target="$dir/$file_name"
 
+            echo "Target file: $target"
+
             if [ ! -f "$target" ]; then
-              echo "ERROR: File does not exist: $target"
+              echo "ERROR: Config file does not exist: $target"
               exit 1
             fi
 
-            if [ ! -f "$dir/package.json" ]; then
-              echo "ERROR: package.json is missing in $dir"
-              exit 1
-            fi
-
+            # ----------------------------------------
+            # Check schema.json
+            # ----------------------------------------
             if [ ! -f "$dir/schema.json" ]; then
               echo "ERROR: schema.json is missing in $dir"
               exit 1
             fi
 
+            # ----------------------------------------
+            # Calculate MD5
+            # ----------------------------------------
             actual_md5=$(md5sum "$target" | awk '{print $1}')
 
             echo "Actual MD5: $actual_md5"
 
             if [ "$actual_md5" != "$expected_md5" ]; then
+              echo ""
               echo "ERROR: MD5 verification FAILED"
+              echo "File: $target"
               echo "Expected: $expected_md5"
               echo "Actual: $actual_md5"
               exit 1
             fi
 
             echo "MD5 verification PASSED"
+
+            echo ""
             echo "Config validation PASSED"
+
           done
 
           echo ""
@@ -120,7 +166,7 @@ jobs:
           echo "========================================"
 
       # ========================================
-      # Configure AWS ONLY after validation
+      # Configure AWS
       # ========================================
       - name: Configure AWS
         if: github.event_name == 'push'
@@ -158,25 +204,37 @@ jobs:
             s3_path="s3://$S3_BUCKET/$name/"
 
             echo ""
-            echo "Checking: $s3_path"
+            echo "Checking:"
+            echo "$s3_path"
 
             if aws s3 ls "$s3_path" --recursive | grep -q .
             then
               echo ""
+              echo "========================================"
               echo "ERROR: S3 name already exists!"
+              echo "========================================"
+
               echo "Name: $name"
               echo "Path: $s3_path"
+
               echo ""
               echo "Existing objects:"
               aws s3 ls "$s3_path" --recursive
+
+              echo ""
+              echo "Refusing to overwrite existing config."
+
               exit 1
             fi
 
             echo "S3 name is available: $name"
+
           done
 
           echo ""
-          echo "All S3 names are available"
+          echo "========================================"
+          echo "ALL S3 NAMES ARE AVAILABLE"
+          echo "========================================"
 
       # ========================================
       # Upload
@@ -202,13 +260,34 @@ jobs:
             s3_path="s3://$S3_BUCKET/$name"
 
             echo ""
-            echo "Uploading: $name"
+            echo "========================================"
+            echo "Uploading config"
+            echo "========================================"
 
-            aws s3 cp "$dir/package.json" "$s3_path/package.json"
-            aws s3 cp "$dir/schema.json" "$s3_path/schema.json"
-            aws s3 cp "$dir/meta.json" "$s3_path/meta.json"
+            echo "Name: $name"
+            echo "Destination: $s3_path"
 
-            echo "Upload successful: $s3_path"
+            # package.json comes from repository root
+            aws s3 cp \
+              "./package.json" \
+              "$s3_path/package.json"
+
+            # schema.json comes from the config directory
+            aws s3 cp \
+              "$dir/schema.json" \
+              "$s3_path/schema.json"
+
+            # meta.json comes from the config directory
+            aws s3 cp \
+              "$dir/meta.json" \
+              "$s3_path/meta.json"
+
+            echo ""
+            echo "Upload successful!"
+            echo "$s3_path/package.json"
+            echo "$s3_path/schema.json"
+            echo "$s3_path/meta.json"
+
           done
 
           echo ""
