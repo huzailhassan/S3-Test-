@@ -28,16 +28,67 @@ jobs:
         run: |
           set -e
 
-          echo "Searching for schema.json files..."
+          echo "========================================"
+          echo "Validating config files"
+          echo "========================================"
 
-          find . -type f -name "schema.json" | while read -r schema; do
-            dir=$(dirname "$schema")
+          find . -type f -name "meta.json" | while read -r meta; do
+            dir=$(dirname "$meta")
 
             echo ""
             echo "========================================"
-            echo "Schema: $schema"
+            echo "Meta: $meta"
             echo "Directory: $dir"
             echo "========================================"
 
-            # your validation logic here
+            # Read file_name and md5 from meta.json
+            file_name=$(jq -r '.file_name' "$meta")
+            expected_md5=$(jq -r '.md5' "$meta")
+
+            echo "file_name: $file_name"
+            echo "expected md5: $expected_md5"
+
+            # Validate meta.json fields
+            if [ "$file_name" = "null" ] || [ -z "$file_name" ]; then
+              echo "ERROR: file_name is missing in $meta"
+              exit 1
+            fi
+
+            if [ "$expected_md5" = "null" ] || [ -z "$expected_md5" ]; then
+              echo "ERROR: md5 is missing in $meta"
+              exit 1
+            fi
+
+            # The file specified by file_name must be in the same directory
+            target_file="$dir/$file_name"
+
+            if [ ! -f "$target_file" ]; then
+              echo "ERROR: File does not exist: $target_file"
+              exit 1
+            fi
+
+            echo "Target file: $target_file"
+
+            # Calculate actual MD5
+            actual_md5=$(md5sum "$target_file" | awk '{print $1}')
+
+            echo "Actual md5:   $actual_md5"
+            echo "Expected md5: $expected_md5"
+
+            # Compare MD5
+            if [ "$actual_md5" != "$expected_md5" ]; then
+              echo ""
+              echo "ERROR: MD5 verification FAILED"
+              echo "File: $target_file"
+              echo "Expected: $expected_md5"
+              echo "Actual:   $actual_md5"
+              exit 1
+            fi
+
+            echo "MD5 verification PASSED"
           done
+
+          echo ""
+          echo "========================================"
+          echo "All MD5 validations passed!"
+          echo "========================================"
