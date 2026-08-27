@@ -13,66 +13,66 @@ jobs:
         uses: actions/checkout@v4
 
       # ========================================
-      # Check files
+      # 检查文件
       # ========================================
-      - name: Check files
+      - name: 检查文件
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Repository files"
+          echo "检查仓库文件"
           echo "========================================"
 
           pwd
           ls -la
 
           echo ""
-          echo "package.json:"
+          echo "最外层 package.json:"
           find . -maxdepth 1 -type f -name "package.json" -print
 
           echo ""
-          echo "schema.json:"
+          echo "所有 schema.json:"
           find . -type f -name "schema.json" -print
 
           echo ""
-          echo "meta.json:"
+          echo "所有 meta.json:"
           find . -type f -name "meta.json" -print
 
       # ========================================
-      # Validate JSON + MD5
+      # 验证 JSON + MD5
       # ========================================
-      - name: Validate config files
+      - name: 验证配置文件
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Step 1: Validate JSON syntax"
+          echo "第一步：验证 JSON 格式"
           echo "========================================"
 
           find . -type f \( -name "meta.json" -o -name "schema.json" \) |
           while IFS= read -r file
           do
-            echo "Checking JSON: $file"
+            echo "正在检查 JSON：$file"
 
             jq empty "$file"
 
-            echo "JSON OK: $file"
+            echo "JSON 格式正确：$file"
           done
 
           echo ""
           echo "========================================"
-          echo "Step 2: Validate config files"
+          echo "第二步：验证配置文件"
           echo "========================================"
 
-          # package.json must exist in repository root
+          # 最外层必须存在 package.json
           if [ ! -f "./package.json" ]; then
-            echo "ERROR: package.json is missing from repository root"
+            echo "错误：最外层缺少 package.json"
             exit 1
           fi
 
-          echo "Root package.json found: ./package.json"
+          echo "找到最外层 package.json：./package.json"
 
           find . -type f -name "meta.json" |
           while IFS= read -r meta
@@ -81,94 +81,82 @@ jobs:
 
             echo ""
             echo "========================================"
-            echo "Meta: $meta"
-            echo "Directory: $dir"
+            echo "正在验证：$meta"
+            echo "所在目录：$dir"
             echo "========================================"
 
             name=$(jq -r '.meta.name // empty' "$meta")
             file_name=$(jq -r '.meta.file_name // empty' "$meta")
             expected_md5=$(jq -r '.meta.md5 // empty' "$meta")
 
-            echo "Name: $name"
-            echo "File: $file_name"
-            echo "Expected MD5: $expected_md5"
+            echo "name：$name"
+            echo "文件名：$file_name"
+            echo "预期 MD5：$expected_md5"
 
-            # ----------------------------------------
-            # Validate name
-            # ----------------------------------------
+            # 检查 name
             if [ -z "$name" ]; then
-              echo "ERROR: meta.name is missing in $meta"
+              echo "错误：$meta 中缺少 meta.name"
               exit 1
             fi
 
-            # ----------------------------------------
-            # Validate file_name
-            # ----------------------------------------
+            # 检查 file_name
             if [ -z "$file_name" ]; then
-              echo "ERROR: meta.file_name is missing in $meta"
+              echo "错误：$meta 中缺少 meta.file_name"
               exit 1
             fi
 
-            # ----------------------------------------
-            # Validate MD5
-            # ----------------------------------------
+            # 检查 md5
             if [ -z "$expected_md5" ]; then
-              echo "ERROR: meta.md5 is missing in $meta"
+              echo "错误：$meta 中缺少 meta.md5"
               exit 1
             fi
 
-            # ----------------------------------------
-            # Check config file
-            # ----------------------------------------
+            # 检查配置文件
             target="$dir/$file_name"
 
-            echo "Target file: $target"
+            echo "配置文件：$target"
 
             if [ ! -f "$target" ]; then
-              echo "ERROR: Config file does not exist: $target"
+              echo "错误：找不到配置文件：$target"
               exit 1
             fi
 
-            # ----------------------------------------
-            # Check schema.json
-            # ----------------------------------------
+            # 检查 schema.json
             if [ ! -f "$dir/schema.json" ]; then
-              echo "ERROR: schema.json is missing in $dir"
+              echo "错误：$dir 中缺少 schema.json"
               exit 1
             fi
 
-            # ----------------------------------------
-            # Calculate MD5
-            # ----------------------------------------
+            echo "schema.json 存在"
+
+            # 计算 MD5
             actual_md5=$(md5sum "$target" | awk '{print $1}')
 
-            echo "Actual MD5: $actual_md5"
+            echo "实际 MD5：$actual_md5"
 
             if [ "$actual_md5" != "$expected_md5" ]; then
               echo ""
-              echo "ERROR: MD5 verification FAILED"
-              echo "File: $target"
-              echo "Expected: $expected_md5"
-              echo "Actual: $actual_md5"
+              echo "错误：MD5 校验失败"
+              echo "文件：$target"
+              echo "预期：$expected_md5"
+              echo "实际：$actual_md5"
               exit 1
             fi
 
-            echo "MD5 verification PASSED"
-
-            echo ""
-            echo "Config validation PASSED"
+            echo "MD5 校验通过"
+            echo "配置验证通过"
 
           done
 
           echo ""
           echo "========================================"
-          echo "ALL VALIDATIONS PASSED"
+          echo "所有配置验证通过"
           echo "========================================"
 
       # ========================================
-      # Configure AWS
+      # 配置 AWS
       # ========================================
-      - name: Configure AWS
+      - name: 配置 AWS
         if: github.event_name == 'push'
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -177,9 +165,9 @@ jobs:
           aws-region: us-west-2
 
       # ========================================
-      # Check S3 names
+      # 检查 S3
       # ========================================
-      - name: Check S3 names
+      - name: 检查 S3 名称
         if: github.event_name == 'push'
         shell: bash
         env:
@@ -188,7 +176,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "Checking S3 names"
+          echo "第三步：检查 S3 名称"
           echo "========================================"
 
           find . -type f -name "meta.json" |
@@ -197,49 +185,48 @@ jobs:
             name=$(jq -r '.meta.name // empty' "$meta")
 
             if [ -z "$name" ]; then
-              echo "ERROR: meta.name is missing in $meta"
+              echo "错误：$meta 中缺少 meta.name"
               exit 1
             fi
 
             s3_path="s3://$S3_BUCKET/$name/"
 
             echo ""
-            echo "Checking:"
-            echo "$s3_path"
+            echo "正在检查 S3：$s3_path"
 
             if aws s3 ls "$s3_path" --recursive | grep -q .
             then
               echo ""
               echo "========================================"
-              echo "ERROR: S3 name already exists!"
+              echo "错误：S3 中已经存在这个 name"
               echo "========================================"
 
-              echo "Name: $name"
-              echo "Path: $s3_path"
+              echo "name：$name"
+              echo "S3 路径：$s3_path"
 
               echo ""
-              echo "Existing objects:"
+              echo "已经存在的文件："
               aws s3 ls "$s3_path" --recursive
 
               echo ""
-              echo "Refusing to overwrite existing config."
+              echo "为了防止覆盖已有配置，本次上传终止。"
 
               exit 1
             fi
 
-            echo "S3 name is available: $name"
+            echo "S3 名称可用：$name"
 
           done
 
           echo ""
           echo "========================================"
-          echo "ALL S3 NAMES ARE AVAILABLE"
+          echo "所有 S3 名称均可用"
           echo "========================================"
 
       # ========================================
-      # Upload
+      # 上传 S3
       # ========================================
-      - name: Upload to S3
+      - name: 上传配置到 S3
         if: github.event_name == 'push'
         shell: bash
         env:
@@ -248,7 +235,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "Uploading to S3"
+          echo "第四步：上传配置到 S3"
           echo "========================================"
 
           find . -type f -name "meta.json" |
@@ -261,36 +248,33 @@ jobs:
 
             echo ""
             echo "========================================"
-            echo "Uploading config"
+            echo "正在上传配置"
             echo "========================================"
 
-            echo "Name: $name"
-            echo "Destination: $s3_path"
+            echo "name：$name"
+            echo "目标：$s3_path"
 
-            # package.json comes from repository root
+            echo "上传 package.json..."
             aws s3 cp \
               "./package.json" \
               "$s3_path/package.json"
 
-            # schema.json comes from the config directory
+            echo "上传 schema.json..."
             aws s3 cp \
               "$dir/schema.json" \
               "$s3_path/schema.json"
 
-            # meta.json comes from the config directory
+            echo "上传 meta.json..."
             aws s3 cp \
               "$dir/meta.json" \
               "$s3_path/meta.json"
 
             echo ""
-            echo "Upload successful!"
-            echo "$s3_path/package.json"
-            echo "$s3_path/schema.json"
-            echo "$s3_path/meta.json"
+            echo "上传成功：$s3_path"
 
           done
 
           echo ""
           echo "========================================"
-          echo "ALL UPLOADS COMPLETED"
+          echo "所有配置上传完成"
           echo "========================================"
