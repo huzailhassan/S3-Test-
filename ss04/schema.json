@@ -4,8 +4,8 @@
   "required": ["op", "currency", "bet"],
   "properties": {
     "op": {
-      "type": "string",
-      "enum": ["TRIAL"]
+      "type": "integer",
+      "enum": [0]
     },
     "currency": {
       "type": "string",
