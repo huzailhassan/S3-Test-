@@ -1,10 +1,10 @@
 {
   "meta": {
-    "name": "SS04",
-    "file_name": "config.json",
+    "name_s3": "SS04",
+    "file_name_git": "config.json",
     "size": 245,
     "md5": "94faa8bf9b6d607c79907664230da100",
     "version": "1.0.0",
-    "updatedAt": "2026-08-26T23:48:00Z"
-  }
+    "createdAt": "2026-08-26T23:48:00Z"
+  }  
 }

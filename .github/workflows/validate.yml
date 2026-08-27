@@ -43,7 +43,7 @@ jobs:
           find . -type f -name "meta.json" -print
 
       # ========================================
-      # 验证 JSON + name 唯一性 + MD5
+      # 验证 JSON + name_s3 唯一性 + MD5
       # ========================================
       - name: 验证配置文件
         shell: bash
@@ -68,11 +68,11 @@ jobs:
           done
 
           # ========================================
-          # 第二步：检查 meta.name 是否唯一
+          # 第二步：检查 meta.name_s3 是否唯一
           # ========================================
           echo ""
           echo "========================================"
-          echo "第二步：检查 meta.name 是否唯一"
+          echo "第二步：检查 meta.name_s3 是否唯一"
           echo "========================================"
 
           names=$(mktemp)
@@ -80,16 +80,16 @@ jobs:
           find . -type f -name "meta.json" |
           while IFS= read -r meta
           do
-            name=$(jq -r '.meta.name // empty' "$meta")
+            name_s3=$(jq -r '.meta.name_s3 // empty' "$meta")
 
-            if [ -z "$name" ]; then
-              echo "错误：$meta 中缺少 meta.name"
+            if [ -z "$name_s3" ]; then
+              echo "错误：$meta 中缺少 meta.name_s3"
               rm -f "$names"
               exit 1
             fi
 
-            echo "读取 name：$name"
-            echo "$name" >> "$names"
+            echo "读取 name_s3：$name_s3"
+            echo "$name_s3" >> "$names"
           done
 
           duplicate=$(sort "$names" | uniq -d)
@@ -97,28 +97,28 @@ jobs:
           if [ -n "$duplicate" ]; then
             echo ""
             echo "========================================"
-            echo "错误：发现重复的 meta.name"
+            echo "错误：发现重复的 meta.name_s3"
             echo "========================================"
 
             echo "$duplicate" |
-            while IFS= read -r name
+            while IFS= read -r name_s3
             do
               echo ""
-              echo "重复的 name：$name"
+              echo "重复的 name_s3：$name_s3"
 
               find . -type f -name "meta.json" |
               while IFS= read -r meta
               do
-                current=$(jq -r '.meta.name // empty' "$meta")
+                current=$(jq -r '.meta.name_s3 // empty' "$meta")
 
-                if [ "$current" = "$name" ]; then
+                if [ "$current" = "$name_s3" ]; then
                   echo "  -> $meta"
                 fi
               done
             done
 
             echo ""
-            echo "所有 meta.name 必须唯一，校验终止。"
+            echo "所有 meta.name_s3 必须唯一，校验终止。"
 
             rm -f "$names"
             exit 1
@@ -127,7 +127,7 @@ jobs:
           rm -f "$names"
 
           echo ""
-          echo "所有 meta.name 均唯一"
+          echo "所有 meta.name_s3 均唯一"
 
           # ========================================
           # 第三步：验证配置文件
@@ -156,27 +156,27 @@ jobs:
             echo "所在目录：$dir"
             echo "========================================"
 
-            name=$(jq -r '.meta.name // empty' "$meta")
-            file_name=$(jq -r '.meta.file_name // empty' "$meta")
+            name_s3=$(jq -r '.meta.name_s3 // empty' "$meta")
+            name_git=$(jq -r '.meta.name_git // empty' "$meta")
             expected_md5=$(jq -r '.meta.md5 // empty' "$meta")
 
-            echo "name：$name"
-            echo "文件名：$file_name"
+            echo "S3 名称：$name_s3"
+            echo "Git 文件名：$name_git"
             echo "预期 MD5：$expected_md5"
 
             # ----------------------------------------
-            # 检查 name
+            # 检查 name_s3
             # ----------------------------------------
-            if [ -z "$name" ]; then
-              echo "错误：$meta 中缺少 meta.name"
+            if [ -z "$name_s3" ]; then
+              echo "错误：$meta 中缺少 meta.name_s3"
               exit 1
             fi
 
             # ----------------------------------------
-            # 检查 file_name
+            # 检查 name_git
             # ----------------------------------------
-            if [ -z "$file_name" ]; then
-              echo "错误：$meta 中缺少 meta.file_name"
+            if [ -z "$name_git" ]; then
+              echo "错误：$meta 中缺少 meta.name_git"
               exit 1
             fi
 
@@ -191,7 +191,7 @@ jobs:
             # ----------------------------------------
             # 检查配置文件
             # ----------------------------------------
-            target="$dir/$file_name"
+            target="$dir/$name_git"
 
             echo "配置文件：$target"
 
@@ -271,14 +271,14 @@ jobs:
           find . -type f -name "meta.json" |
           while IFS= read -r meta
           do
-            name=$(jq -r '.meta.name // empty' "$meta")
+            name_s3=$(jq -r '.meta.name_s3 // empty' "$meta")
 
-            if [ -z "$name" ]; then
-              echo "错误：$meta 中缺少 meta.name"
+            if [ -z "$name_s3" ]; then
+              echo "错误：$meta 中缺少 meta.name_s3"
               exit 1
             fi
 
-            s3_path="s3://$S3_BUCKET/$name/"
+            s3_path="s3://$S3_BUCKET/$name_s3/"
 
             echo ""
             echo "正在检查 S3：$s3_path"
@@ -287,10 +287,10 @@ jobs:
             then
               echo ""
               echo "========================================"
-              echo "错误：S3 中已经存在这个 name"
+              echo "错误：S3 中已经存在这个 name_s3"
               echo "========================================"
 
-              echo "name：$name"
+              echo "name_s3：$name_s3"
               echo "S3 路径：$s3_path"
 
               echo ""
@@ -303,7 +303,7 @@ jobs:
               exit 1
             fi
 
-            echo "S3 名称可用：$name"
+            echo "S3 名称可用：$name_s3"
 
           done
 
@@ -331,17 +331,18 @@ jobs:
           while IFS= read -r meta
           do
             dir=$(dirname "$meta")
-            name=$(jq -r '.meta.name // empty' "$meta")
-            file_name=$(jq -r '.meta.file_name // empty' "$meta")
+            name_s3=$(jq -r '.meta.name_s3 // empty' "$meta")
+            name_git=$(jq -r '.meta.name_git // empty' "$meta")
 
-            s3_path="s3://$S3_BUCKET/$name"
+            s3_path="s3://$S3_BUCKET/$name_s3"
 
             echo ""
             echo "========================================"
             echo "正在上传配置"
             echo "========================================"
 
-            echo "name：$name"
+            echo "S3 名称：$name_s3"
+            echo "Git 文件名：$name_git"
             echo "目标：$s3_path"
 
             # ----------------------------------------
@@ -374,13 +375,13 @@ jobs:
             # ----------------------------------------
             # 上传配置文件
             # ----------------------------------------
-            target="$dir/$file_name"
+            target="$dir/$name_git"
 
-            echo "上传配置文件：$file_name..."
+            echo "上传配置文件：$name_git..."
 
             aws s3 cp \
               "$target" \
-              "$s3_path/$file_name"
+              "$s3_path/$name_git"
 
             echo ""
             echo "上传成功：$s3_path"
