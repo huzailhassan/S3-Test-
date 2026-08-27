@@ -1,3 +1,4 @@
+```yaml
 name: Validate
 
 on:
@@ -12,36 +13,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS
-        if: github.event_name == 'push'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Check files
+        shell: bash
+        run: |
+          pwd
+          ls -la
 
-      - name: Validate JSON and MD5
+          echo "package.json files:"
+          find . -type f -name "package.json" -print
+
+          echo "schema.json files:"
+          find . -type f -name "schema.json" -print
+
+          echo "meta.json files:"
+          find . -type f -name "meta.json" -print
+
+      # ========================================
+      # Validate JSON + Schema + MD5
+      # ========================================
+      - name: Validate config files
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Validating JSON files"
+          echo "Step 1: Validate JSON syntax"
           echo "========================================"
 
-          find . -type f \( -name "meta.json" -o -name "schema.json" \) | while IFS= read -r file
+          find . -type f \( -name "meta.json" -o -name "schema.json" \) |
+          while IFS= read -r file
           do
-            echo "Checking: $file"
+            echo "Checking JSON: $file"
             jq empty "$file"
-            echo "OK: $file"
+            echo "JSON OK: $file"
           done
 
           echo ""
           echo "========================================"
-          echo "Validating config files"
+          echo "Step 2: Validate config files"
           echo "========================================"
 
-          find . -type f -name "meta.json" | while IFS= read -r meta
+          find . -type f -name "meta.json" |
+          while IFS= read -r meta
           do
             dir=$(dirname "$meta")
 
@@ -94,18 +107,33 @@ jobs:
             if [ "$actual_md5" != "$expected_md5" ]; then
               echo "ERROR: MD5 verification FAILED"
               echo "Expected: $expected_md5"
-              echo "Actual:   $actual_md5"
+              echo "Actual: $actual_md5"
               exit 1
             fi
 
             echo "MD5 verification PASSED"
+            echo "Config validation PASSED"
           done
 
           echo ""
           echo "========================================"
-          echo "Validation passed"
+          echo "ALL VALIDATIONS PASSED"
           echo "========================================"
 
+      # ========================================
+      # Configure AWS ONLY after validation
+      # ========================================
+      - name: Configure AWS
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      # ========================================
+      # Check S3 names
+      # ========================================
       - name: Check S3 names
         if: github.event_name == 'push'
         shell: bash
@@ -115,10 +143,11 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "Checking S3"
+          echo "Checking S3 names"
           echo "========================================"
 
-          find . -type f -name "meta.json" | while IFS= read -r meta
+          find . -type f -name "meta.json" |
+          while IFS= read -r meta
           do
             name=$(jq -r '.meta.name // empty' "$meta")
 
@@ -135,21 +164,24 @@ jobs:
             if aws s3 ls "$s3_path" --recursive | grep -q .
             then
               echo ""
-              echo "ERROR: Name already exists in S3"
+              echo "ERROR: S3 name already exists!"
               echo "Name: $name"
               echo "Path: $s3_path"
               echo ""
-              echo "Existing files:"
+              echo "Existing objects:"
               aws s3 ls "$s3_path" --recursive
               exit 1
             fi
 
-            echo "Available: $name"
+            echo "S3 name is available: $name"
           done
 
           echo ""
           echo "All S3 names are available"
 
+      # ========================================
+      # Upload
+      # ========================================
       - name: Upload to S3
         if: github.event_name == 'push'
         shell: bash
@@ -162,12 +194,13 @@ jobs:
           echo "Uploading to S3"
           echo "========================================"
 
-          find . -type f -name "meta.json" | while IFS= read -r meta
+          find . -type f -name "meta.json" |
+          while IFS= read -r meta
           do
             dir=$(dirname "$meta")
             name=$(jq -r '.meta.name // empty' "$meta")
 
-            s3_path="s3://$S3_BUCKET/$name/"
+            s3_path="s3://$S3_BUCKET/$name"
 
             echo ""
             echo "Uploading: $name"
@@ -176,10 +209,11 @@ jobs:
             aws s3 cp "$dir/schema.json" "$s3_path/schema.json"
             aws s3 cp "$dir/meta.json" "$s3_path/meta.json"
 
-            echo "Uploaded: $s3_path"
+            echo "Upload successful: $s3_path"
           done
 
           echo ""
           echo "========================================"
-          echo "Upload completed"
+          echo "ALL UPLOADS COMPLETED"
           echo "========================================"
+```
