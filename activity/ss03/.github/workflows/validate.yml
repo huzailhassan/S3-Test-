@@ -1,0 +1,64 @@
+name: Validate Configs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate config files
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for schema.json files..."
+
+          find . -type f -name "schema.json" | while read -r schema; do
+            dir=$(dirname "$schema")
+
+            echo ""
+            echo "========================================"
+            echo "Schema: $schema"
+            echo "Directory: $dir"
+            echo "========================================"
+
+            file_name=$(jq -r '.file_name // empty' "$schema")
+
+            if [ -z "$file_name" ]; then
+              echo "ERROR: file_name is not specified in $schema"
+              exit 1
+            fi
+
+            echo "Expected file: $file_name"
+
+            target_file="$dir/$file_name"
+
+            if [ ! -f "$target_file" ]; then
+              echo "ERROR: $target_file does not exist"
+              exit 1
+            fi
+
+            echo "Found: $target_file"
+
+            npx ajv-cli validate \
+              -s "$schema" \
+              -d "$target_file"
+
+            echo "Validation passed: $target_file"
+          done
