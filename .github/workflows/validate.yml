@@ -43,7 +43,7 @@ jobs:
           find . -type f -name "meta.json" -print
 
       # ========================================
-      # 验证 JSON + file_name 唯一性 + MD5
+      # 验证 JSON + name 唯一性 + MD5
       # ========================================
       - name: 验证配置文件
         shell: bash
@@ -68,48 +68,48 @@ jobs:
           done
 
           # ========================================
-          # 第二步：检查 file_name 是否唯一
+          # 第二步：检查 meta.name 是否唯一
           # ========================================
           echo ""
           echo "========================================"
-          echo "第二步：检查 file_name 是否唯一"
+          echo "第二步：检查 meta.name 是否唯一"
           echo "========================================"
 
-          file_names=$(mktemp)
+          names=$(mktemp)
 
           find . -type f -name "meta.json" |
           while IFS= read -r meta
           do
-            file_name=$(jq -r '.meta.file_name // empty' "$meta")
+            name=$(jq -r '.meta.name // empty' "$meta")
 
-            if [ -z "$file_name" ]; then
-              echo "错误：$meta 中缺少 meta.file_name"
-              rm -f "$file_names"
+            if [ -z "$name" ]; then
+              echo "错误：$meta 中缺少 meta.name"
+              rm -f "$names"
               exit 1
             fi
 
-            echo "读取 file_name：$file_name"
-            echo "$file_name" >> "$file_names"
+            echo "读取 name：$name"
+            echo "$name" >> "$names"
           done
 
-          duplicate=$(sort "$file_names" | uniq -d)
+          duplicate=$(sort "$names" | uniq -d)
 
           if [ -n "$duplicate" ]; then
             echo ""
             echo "========================================"
-            echo "错误：发现重复的 file_name"
+            echo "错误：发现重复的 meta.name"
             echo "========================================"
 
             echo "$duplicate" |
             while IFS= read -r name
             do
               echo ""
-              echo "重复的 file_name：$name"
+              echo "重复的 name：$name"
 
               find . -type f -name "meta.json" |
               while IFS= read -r meta
               do
-                current=$(jq -r '.meta.file_name // empty' "$meta")
+                current=$(jq -r '.meta.name // empty' "$meta")
 
                 if [ "$current" = "$name" ]; then
                   echo "  -> $meta"
@@ -118,16 +118,16 @@ jobs:
             done
 
             echo ""
-            echo "所有 file_name 必须唯一，校验终止。"
+            echo "所有 meta.name 必须唯一，校验终止。"
 
-            rm -f "$file_names"
+            rm -f "$names"
             exit 1
           fi
 
-          rm -f "$file_names"
+          rm -f "$names"
 
           echo ""
-          echo "所有 file_name 均唯一"
+          echo "所有 meta.name 均唯一"
 
           # ========================================
           # 第三步：验证配置文件
@@ -332,6 +332,7 @@ jobs:
           do
             dir=$(dirname "$meta")
             name=$(jq -r '.meta.name // empty' "$meta")
+            file_name=$(jq -r '.meta.file_name // empty' "$meta")
 
             s3_path="s3://$S3_BUCKET/$name"
 
@@ -373,7 +374,6 @@ jobs:
             # ----------------------------------------
             # 上传配置文件
             # ----------------------------------------
-            file_name=$(jq -r '.meta.file_name // empty' "$meta")
             target="$dir/$file_name"
 
             echo "上传配置文件：$file_name..."
