@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ========================================
+      # Checkout
+      # ========================================
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -40,13 +43,16 @@ jobs:
           find . -type f -name "meta.json" -print
 
       # ========================================
-      # 验证 JSON + MD5
+      # 验证 JSON + file_name 唯一性 + MD5
       # ========================================
       - name: 验证配置文件
         shell: bash
         run: |
           set -e
 
+          # ========================================
+          # 第一步：验证 JSON 格式
+          # ========================================
           echo "========================================"
           echo "第一步：验证 JSON 格式"
           echo "========================================"
@@ -61,9 +67,74 @@ jobs:
             echo "JSON 格式正确：$file"
           done
 
+          # ========================================
+          # 第二步：检查 file_name 是否唯一
+          # ========================================
           echo ""
           echo "========================================"
-          echo "第二步：验证配置文件"
+          echo "第二步：检查 file_name 是否唯一"
+          echo "========================================"
+
+          file_names=$(mktemp)
+
+          find . -type f -name "meta.json" |
+          while IFS= read -r meta
+          do
+            file_name=$(jq -r '.meta.file_name // empty' "$meta")
+
+            if [ -z "$file_name" ]; then
+              echo "错误：$meta 中缺少 meta.file_name"
+              rm -f "$file_names"
+              exit 1
+            fi
+
+            echo "读取 file_name：$file_name"
+            echo "$file_name" >> "$file_names"
+          done
+
+          duplicate=$(sort "$file_names" | uniq -d)
+
+          if [ -n "$duplicate" ]; then
+            echo ""
+            echo "========================================"
+            echo "错误：发现重复的 file_name"
+            echo "========================================"
+
+            echo "$duplicate" |
+            while IFS= read -r name
+            do
+              echo ""
+              echo "重复的 file_name：$name"
+
+              find . -type f -name "meta.json" |
+              while IFS= read -r meta
+              do
+                current=$(jq -r '.meta.file_name // empty' "$meta")
+
+                if [ "$current" = "$name" ]; then
+                  echo "  -> $meta"
+                fi
+              done
+            done
+
+            echo ""
+            echo "所有 file_name 必须唯一，校验终止。"
+
+            rm -f "$file_names"
+            exit 1
+          fi
+
+          rm -f "$file_names"
+
+          echo ""
+          echo "所有 file_name 均唯一"
+
+          # ========================================
+          # 第三步：验证配置文件
+          # ========================================
+          echo ""
+          echo "========================================"
+          echo "第三步：验证配置文件"
           echo "========================================"
 
           # 最外层必须存在 package.json
@@ -93,25 +164,33 @@ jobs:
             echo "文件名：$file_name"
             echo "预期 MD5：$expected_md5"
 
+            # ----------------------------------------
             # 检查 name
+            # ----------------------------------------
             if [ -z "$name" ]; then
               echo "错误：$meta 中缺少 meta.name"
               exit 1
             fi
 
+            # ----------------------------------------
             # 检查 file_name
+            # ----------------------------------------
             if [ -z "$file_name" ]; then
               echo "错误：$meta 中缺少 meta.file_name"
               exit 1
             fi
 
+            # ----------------------------------------
             # 检查 md5
+            # ----------------------------------------
             if [ -z "$expected_md5" ]; then
               echo "错误：$meta 中缺少 meta.md5"
               exit 1
             fi
 
+            # ----------------------------------------
             # 检查配置文件
+            # ----------------------------------------
             target="$dir/$file_name"
 
             echo "配置文件：$target"
@@ -121,7 +200,11 @@ jobs:
               exit 1
             fi
 
+            echo "配置文件存在"
+
+            # ----------------------------------------
             # 检查 schema.json
+            # ----------------------------------------
             if [ ! -f "$dir/schema.json" ]; then
               echo "错误：$dir 中缺少 schema.json"
               exit 1
@@ -129,17 +212,23 @@ jobs:
 
             echo "schema.json 存在"
 
+            # ----------------------------------------
             # 计算 MD5
+            # ----------------------------------------
             actual_md5=$(md5sum "$target" | awk '{print $1}')
 
             echo "实际 MD5：$actual_md5"
 
             if [ "$actual_md5" != "$expected_md5" ]; then
               echo ""
+              echo "========================================"
               echo "错误：MD5 校验失败"
+              echo "========================================"
+
               echo "文件：$target"
               echo "预期：$expected_md5"
               echo "实际：$actual_md5"
+
               exit 1
             fi
 
@@ -176,7 +265,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "第三步：检查 S3 名称"
+          echo "第四步：检查 S3 名称"
           echo "========================================"
 
           find . -type f -name "meta.json" |
@@ -235,7 +324,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "第四步：上传配置到 S3"
+          echo "第五步：上传配置到 S3"
           echo "========================================"
 
           find . -type f -name "meta.json" |
@@ -254,20 +343,44 @@ jobs:
             echo "name：$name"
             echo "目标：$s3_path"
 
+            # ----------------------------------------
+            # 上传 package.json
+            # ----------------------------------------
             echo "上传 package.json..."
+
             aws s3 cp \
               "./package.json" \
               "$s3_path/package.json"
 
+            # ----------------------------------------
+            # 上传 schema.json
+            # ----------------------------------------
             echo "上传 schema.json..."
+
             aws s3 cp \
               "$dir/schema.json" \
               "$s3_path/schema.json"
 
+            # ----------------------------------------
+            # 上传 meta.json
+            # ----------------------------------------
             echo "上传 meta.json..."
+
             aws s3 cp \
               "$dir/meta.json" \
               "$s3_path/meta.json"
+
+            # ----------------------------------------
+            # 上传配置文件
+            # ----------------------------------------
+            file_name=$(jq -r '.meta.file_name // empty' "$meta")
+            target="$dir/$file_name"
+
+            echo "上传配置文件：$file_name..."
+
+            aws s3 cp \
+              "$target" \
+              "$s3_path/$file_name"
 
             echo ""
             echo "上传成功：$s3_path"
